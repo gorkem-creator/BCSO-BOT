@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { joinVoiceChannel } = require('@discordjs/voice');
+const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 const fs = require('fs');
 require('dotenv').config();
 
@@ -32,7 +32,7 @@ client.once('ready', async () => {
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
         new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setDescription('Dakika').setRequired(true)),
         new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi').setDescription('Kişi'))
+        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesaiyi kontrol eder.').addUserOption(o => o.setName('kisi').setDescription('Kişi'))
     ].map(cmd => cmd.toJSON());
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
@@ -49,17 +49,22 @@ client.on('interactionCreate', async interaction => {
             try {
                 joinVoiceChannel({ channelId: member.voice.channel.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator });
                 await interaction.editReply('🔊 Telsize bağlanıldı.');
-            } catch (e) { await interaction.editReply('❌ Hata: ' + e.message); }
+            } catch (e) { await interaction.editReply('❌ Hata oluştu.'); }
+        }
+        else if (commandName === 'ayrıl') {
+            const conn = getVoiceConnection(guild.id);
+            if (conn) { conn.destroy(); await interaction.editReply('🔇 Telsiz bağlantısı kesildi.'); }
+            else { await interaction.editReply('❌ Bot zaten kanalda değil.'); }
         }
         else if (commandName === 'mesai-sistemi-kur') {
             const embed = new EmbedBuilder()
                 .setTitle('⚖️ BCSO MESAİ SİSTEMİ')
-                .setDescription('Aşağıdaki butonları kullanarak mesai giriş ve çıkış işlemlerini yapabilirsiniz.')
+                .setDescription('Aşağıdaki butonları kullanarak mesai giriş (10-41) ve çıkış (10-42) yapabilirsiniz.')
                 .setColor('#2b2d31')
                 .setThumbnail(AYARLAR.LOGO);
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('mesai_basla').setLabel('Mesai Giriş (10-41)').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('mesai_bitir').setLabel('Mesai Çıkış (10-42)').setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('mesai_basla').setLabel('10-41 (Giriş)').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('mesai_bitir').setLabel('10-42 (Çıkış)').setStyle(ButtonStyle.Danger)
             );
             await channel.send({ embeds: [embed], components: [row] });
             await interaction.editReply('✅ Panel kuruldu.');
@@ -82,12 +87,30 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isButton()) {
-        if (interaction.customId === 'basvuru_formu_ac') {
-            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru Formu')
-                .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_aktiflik').setLabel('Aktiflik').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_tecrube').setLabel('Tecrübe').setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_neden').setLabel('Neden?').setStyle(TextInputStyle.Paragraph).setRequired(true)));
-            await interaction.showModal(modal);
-        }
-        else if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 10-41.', ephemeral: true }); }
+        if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 10-41.', ephemeral: true }); }
         else if (interaction.customId === 'mesai_bitir') {
             if (!mesaiTakip.has(interaction.user.id)) return await interaction.reply({ content: '❌ Aktif mesain yok.', ephemeral: true });
             const sure = Math.floor((Date.now() - mesaiTakip.get(interaction.user.id)) / 60000);
+            mesaiTakip.delete(interaction.user.id);
+            toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
+            veritabaniKaydet();
+            await interaction.reply({ content: `✅ 10-42. Süre: ${sure} dk.`, ephemeral: true });
+        }
+        else if (interaction.customId === 'basvuru_formu_ac') {
+            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru Formu')
+                .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim/Yaş').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_aktiflik').setLabel('Aktiflik').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_tecrube').setLabel('Tecrübe').setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_neden').setLabel('Neden?').setStyle(TextInputStyle.Paragraph).setRequired(true)));
+            await interaction.showModal(modal);
+        }
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === 'bcso_basvuru_modali') {
+        await interaction.reply({ content: '✅ İletildi.', ephemeral: true });
+        const takipKanali = interaction.guild.channels.cache.find(ch => ch.name.toLowerCase().includes(AYARLAR.BASVURU_TAKIP_KANALI.toLowerCase()));
+        if (takipKanali) {
+            const embed = new EmbedBuilder().setTitle('Yeni Başvuru').addFields({ name: 'İsim', value: interaction.fields.getTextInputValue('b_isim') });
+            await takipKanali.send({ embeds: [embed] });
+        }
+    }
+});
+
+client.login(process.env.TOKEN);

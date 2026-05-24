@@ -17,13 +17,13 @@ function veritabaniKaydet() { fs.writeFileSync(VERITABANI_DOSYASI, JSON.stringif
 
 client.once('ready', async () => {
     const commands = [
-        new SlashCommandBuilder().setName('katıl').setDescription('Botu ses kanalına çağırır.'),
-        new SlashCommandBuilder().setName('ayrıl').setDescription('Botu ses kanalından çıkarır.'),
+        new SlashCommandBuilder().setName('katıl').setDescription('Telsiz kanalına girer.'),
+        new SlashCommandBuilder().setName('ayrıl').setDescription('Telsizden çıkar.'),
         new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Görsel mesai paneli kurar.'),
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
-        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setDescription('Dakika').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi').setDescription('Kişi')),
+        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekle.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi')),
         new SlashCommandBuilder().setName('mesai-sıralaması').setDescription('Mesai sıralamasını gösterir.')
     ].map(cmd => cmd.toJSON());
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -44,7 +44,13 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'ayrıl') {
             const conn = getVoiceConnection(guild.id);
             if (conn) { conn.destroy(); await interaction.editReply('🔇 Telsiz bağlantısı kesildi.'); }
-            else await interaction.editReply('❌ Bot zaten kanalda değil.');
+            else await interaction.editReply('❌ Bot kanalda değil.');
+        }
+        else if (commandName === 'mesai-sıfırla') {
+            const u = options.getUser('kisi');
+            toplamMesailer[u.id] = 0;
+            veritabaniKaydet();
+            await interaction.editReply(`🧹 **${u.username}** adlı kişinin mesaisi başarıyla sıfırlandı.`);
         }
         else if (commandName === 'mesai-sistemi-kur') {
             const embed = new EmbedBuilder()
@@ -67,22 +73,46 @@ client.on('interactionCreate', async interaction => {
             await channel.send({ embeds: [embed], components: [row] });
             await interaction.editReply('✅ Panel kuruldu.');
         }
-        // ... (Diğer komutlar)
+        else if (commandName === 'mesai-ekle') {
+            toplamMesailer[options.getUser('kisi').id] = (toplamMesailer[options.getUser('kisi').id] || 0) + options.getInteger('dakika');
+            veritabaniKaydet();
+            await interaction.editReply('✅ Mesai eklendi.');
+        }
+        else if (commandName === 'mesai-kontrol') {
+            const u = options.getUser('kisi') || interaction.user;
+            await interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dk mesai yapmış.`);
+        }
+        else if (commandName === 'mesai-sıralaması') {
+            const sirali = Object.entries(toplamMesailer).sort((a,b) => b[1]-a[1]).slice(0,10).map((x,i) => `${i+1}. <@${x[0]}>: ${x[1]} dk`).join('\n');
+            await interaction.editReply(sirali || 'Kayıt yok.');
+        }
     }
 
     if (interaction.isButton()) {
-        if (interaction.customId === 'basvuru_formu_ac') {
-            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('BCSO Başvuru Formu')
-                .addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q1').setLabel('1- İsim Soyisim / Yaş').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q2').setLabel('2- IC İsim Soyisim / Yaş').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q3').setLabel('3- Aktiflik Süreniz').setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q4').setLabel('4- Neden biz ve BCSO?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q5').setLabel('5- 5x Strike Onayı (Evet/Hayır)').setStyle(TextInputStyle.Short).setRequired(true))
-                );
+        if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 10-41 (Giriş) Başladı.', ephemeral: true }); }
+        else if (interaction.customId === 'mesai_bitir') {
+            if (!mesaiTakip.has(interaction.user.id)) return await interaction.reply({ content: '❌ Aktif mesain yok.', ephemeral: true });
+            const sure = Math.floor((Date.now() - mesaiTakip.get(interaction.user.id)) / 60000);
+            mesaiTakip.delete(interaction.user.id);
+            toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
+            veritabaniKaydet();
+            await interaction.reply({ content: `✅ 10-42 (Çıkış) Yapıldı. Süre: ${sure} dk.`, ephemeral: true });
+            const log = interaction.guild.channels.cache.find(c => c.name === LOG_KANALI_ISMI);
+            if (log) {
+                const logEmbed = new EmbedBuilder().setTitle('📊 MESAİ LOG').addFields({name: 'Personel', value: interaction.user.username}, {name: 'Süre', value: `${sure} dk`}).setColor('Red');
+                log.send({ embeds: [logEmbed] });
+            }
+        }
+        else if (interaction.customId === 'basvuru_formu_ac') {
+            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('BCSO Başvuru').addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q1').setLabel('1- İsim Soyisim / Yaş').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q2').setLabel('2- IC İsim Soyisim / Yaş').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q3').setLabel('3- Aktiflik Süreniz').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q4').setLabel('4- Neden biz ve BCSO?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q5').setLabel('5- 5x Strike Onayı (Evet/Hayır)').setStyle(TextInputStyle.Short).setRequired(true))
+            );
             await interaction.showModal(modal);
         }
-        // ... (Diğer butonlar)
     }
 });
 

@@ -17,18 +17,18 @@ function veritabaniKaydet() { fs.writeFileSync(VERITABANI_DOSYASI, JSON.stringif
 
 client.once('ready', async () => {
     const commands = [
-        new SlashCommandBuilder().setName('katıl').setDescription('Telsiz kanalına girer.'),
-        new SlashCommandBuilder().setName('ayrıl').setDescription('Telsizden çıkar.'),
+        new SlashCommandBuilder().setName('katıl').setDescription('Botu ses kanalına çağırır.'),
+        new SlashCommandBuilder().setName('ayrıl').setDescription('Botu ses kanalından çıkarır.'),
         new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Görsel mesai paneli kurar.'),
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
-        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekle.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırla.').addUserOption(o => o.setName('kisi').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol.').addUserOption(o => o.setName('kisi')),
+        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setDescription('Dakika').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi').setDescription('Kişi')),
         new SlashCommandBuilder().setName('mesai-sıralaması').setDescription('Mesai sıralamasını gösterir.')
     ].map(cmd => cmd.toJSON());
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('✅ BCSO | Sistem Başarıyla Aktif Edildi!');
+    console.log('✅ BCSO | Sistem Hazır!');
 });
 
 client.on('interactionCreate', async interaction => {
@@ -66,7 +66,20 @@ client.on('interactionCreate', async interaction => {
             await channel.send({ embeds: [embed], components: [row] });
             await interaction.editReply('✅ Panel kuruldu.');
         }
-        // ... (Diğer komutlar aynı)
+        else if (commandName === 'mesai-ekle') {
+            const u = options.getUser('kisi');
+            toplamMesailer[u.id] = (toplamMesailer[u.id] || 0) + options.getInteger('dakika');
+            veritabaniKaydet();
+            await interaction.editReply(`✅ **${u.username}** adlı kişiye mesai eklendi.`);
+        }
+        else if (commandName === 'mesai-kontrol') {
+            const u = options.getUser('kisi') || interaction.user;
+            await interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dk mesai yapmış.`);
+        }
+        else if (commandName === 'mesai-sıralaması') {
+            const sirali = Object.entries(toplamMesailer).sort((a,b) => b[1]-a[1]).slice(0,10).map((x,i) => `${i+1}. <@${x[0]}>: ${x[1]} dk`).join('\n');
+            await interaction.editReply(sirali || 'Henüz kayıtlı mesai yok.');
+        }
     }
 
     if (interaction.isButton()) {
@@ -79,12 +92,15 @@ client.on('interactionCreate', async interaction => {
             veritabaniKaydet();
             await interaction.reply({ content: `✅ 10-42 (Çıkış) Yapıldı. Süre: ${sure} dk.`, ephemeral: true });
             
-            // LOG SİSTEMİ DÜZELTME
             const log = interaction.guild.channels.cache.find(c => c.name === LOG_KANALI_ISMI);
             if (log) {
                 const logEmbed = new EmbedBuilder().setTitle('📊 MESAİ LOG').addFields({name: 'Personel', value: interaction.user.username}, {name: 'Süre', value: `${sure} dk`}).setColor('Red');
                 log.send({ embeds: [logEmbed] });
             }
+        }
+        else if (interaction.customId === 'basvuru_formu_ac') {
+            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim/Yaş').setStyle(TextInputStyle.Short).setRequired(true)));
+            await interaction.showModal(modal);
         }
     }
 });

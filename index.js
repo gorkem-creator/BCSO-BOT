@@ -17,22 +17,21 @@ function veritabaniKaydet() { fs.writeFileSync(VERITABANI_DOSYASI, JSON.stringif
 
 client.once('ready', async () => {
     const commands = [
-        new SlashCommandBuilder().setName('katıl').setDescription('Botu ses kanalına çağırır.'),
-        new SlashCommandBuilder().setName('ayrıl').setDescription('Botu ses kanalından çıkarır.'),
-        new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Görsel mesai paneli kurar.'),
+        new SlashCommandBuilder().setName('katıl').setDescription('Telsize bağlanır.'),
+        new SlashCommandBuilder().setName('ayrıl').setDescription('Telsizden çıkar.'),
+        new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Mesai paneli kurar.'),
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
-        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi')),
-        new SlashCommandBuilder().setName('mesai-sıralaması').setDescription('Mesai sıralamasını gösterir.')
+        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekle.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırla.').addUserOption(o => o.setName('kisi').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol.').addUserOption(o => o.setName('kisi')),
+        new SlashCommandBuilder().setName('mesai-sıralaması').setDescription('Mesai sıralama.')
     ].map(cmd => cmd.toJSON());
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('✅ BCSO | Sistem Hazır!');
+    console.log('✅ BCSO | Sistem Aktif!');
 });
 
 client.on('interactionCreate', async interaction => {
-    // 1. Slash Komutları (deferReply kullanılan yerler)
     if (interaction.isChatInputCommand()) {
         await interaction.deferReply({ ephemeral: true });
         const { commandName, options, member, guild, channel } = interaction;
@@ -71,7 +70,7 @@ client.on('interactionCreate', async interaction => {
             const embed = new EmbedBuilder()
                 .setTitle('📚 BCSO | BAŞVURU')
                 .setImage('https://media.discordapp.net/attachments/1498313566015717446/1498797722365460683/image.png')
-                .setDescription('Blaine County Şerif Departmanı bünyesine katılmak için formu doldurabilirsiniz.')
+                .setDescription('Blaine County Şerif Departmanı bünyesine katılmak ve şerif yardımcısı rütbesiyle devriyeye çıkmak için aşağıdaki butondan formu doldurabilirsiniz.')
                 .setColor('#2b2d31');
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('basvuru_formu_ac').setLabel('Başvuru Yap').setStyle(ButtonStyle.Primary));
             await channel.send({ embeds: [embed], components: [row] });
@@ -92,7 +91,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2. Butonlar (reply kullanılan yerler)
     if (interaction.isButton()) {
         if (interaction.customId === 'mesai_basla') {
             mesaiTakip.set(interaction.user.id, Date.now());
@@ -105,6 +103,7 @@ client.on('interactionCreate', async interaction => {
             toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
             veritabaniKaydet();
             interaction.reply({ content: `✅ 10-42 (Çıkış) Yapıldı. Süre: ${sure} dk.`, ephemeral: true });
+            
             const log = interaction.guild.channels.cache.find(c => c.name === LOG_KANALI_ISMI);
             if (log) log.send({ embeds: [new EmbedBuilder().setTitle('📊 MESAİ LOG').addFields({name: 'Personel', value: interaction.user.username}, {name: 'Süre', value: `${sure} dk`}).setColor('Red')] });
         }

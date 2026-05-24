@@ -67,10 +67,9 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply('✅ Panel kuruldu.');
         }
         else if (commandName === 'mesai-ekle') {
-            const u = options.getUser('kisi');
-            toplamMesailer[u.id] = (toplamMesailer[u.id] || 0) + options.getInteger('dakika');
+            toplamMesailer[options.getUser('kisi').id] = (toplamMesailer[options.getUser('kisi').id] || 0) + options.getInteger('dakika');
             veritabaniKaydet();
-            await interaction.editReply(`✅ **${u.username}** adlı kişiye mesai eklendi.`);
+            await interaction.editReply('✅ Mesai eklendi.');
         }
         else if (commandName === 'mesai-kontrol') {
             const u = options.getUser('kisi') || interaction.user;
@@ -91,7 +90,6 @@ client.on('interactionCreate', async interaction => {
             toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
             veritabaniKaydet();
             await interaction.reply({ content: `✅ 10-42 (Çıkış) Yapıldı. Süre: ${sure} dk.`, ephemeral: true });
-            
             const log = interaction.guild.channels.cache.find(c => c.name === LOG_KANALI_ISMI);
             if (log) {
                 const logEmbed = new EmbedBuilder().setTitle('📊 MESAİ LOG').addFields({name: 'Personel', value: interaction.user.username}, {name: 'Süre', value: `${sure} dk`}).setColor('Red');
@@ -99,7 +97,14 @@ client.on('interactionCreate', async interaction => {
             }
         }
         else if (interaction.customId === 'basvuru_formu_ac') {
-            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim/Yaş').setStyle(TextInputStyle.Short).setRequired(true)));
+            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('BCSO Başvuru Formu')
+                .addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q1').setLabel('1- İsim Soyisim / Yaş').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q2').setLabel('2- IC İsim Soyisim / Yaş').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q3').setLabel('3- Aktiflik Süreniz').setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q4').setLabel('4- Neden biz ve BCSO?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('q5').setLabel('5- 5x Strike Onayı (Evet/Hayır)').setStyle(TextInputStyle.Short).setRequired(true))
+                );
             await interaction.showModal(modal);
         }
     }

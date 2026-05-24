@@ -61,7 +61,7 @@ client.on('interactionCreate', async interaction => {
             const embed = new EmbedBuilder()
                 .setTitle('📚 BLAINE COUNTY SHERIFF\'S OFFICE | BAŞVURU')
                 .setImage('https://media.discordapp.net/attachments/1498313566015717446/1498797722365460683/image.png')
-                .setDescription('Blaine County Şerif Departmanı bünyesine katılmak için aşağıdaki butondan formu doldurabilirsiniz.')
+                .setDescription('Blaine County Şerif Departmanı bünyesine katılmak ve şerif yardımcısı rütbesiyle devriyeye çıkmak için aşağıdaki butondan formu doldurabilirsiniz.')
                 .setColor('#2b2d31');
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('basvuru_formu_ac').setLabel('Başvuru Yap').setStyle(ButtonStyle.Primary));
             await channel.send({ embeds: [embed], components: [row] });

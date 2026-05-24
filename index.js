@@ -30,9 +30,9 @@ client.once('ready', async () => {
         new SlashCommandBuilder().setName('ayrıl').setDescription('Telsizden çıkar.'),
         new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Görsel mesai paneli kurar.'),
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
-        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekle.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırla.').addUserOption(o => o.setName('kisi').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol.').addUserOption(o => o.setName('kisi'))
+        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setDescription('Dakika').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi').setDescription('Kişi'))
     ].map(cmd => cmd.toJSON());
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
@@ -49,53 +49,45 @@ client.on('interactionCreate', async interaction => {
             try {
                 joinVoiceChannel({ channelId: member.voice.channel.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator });
                 await interaction.editReply('🔊 Telsize bağlanıldı.');
-            } catch (e) { await interaction.editReply('❌ Hata oluştu.'); }
+            } catch (e) { await interaction.editReply('❌ Hata: ' + e.message); }
         }
         else if (commandName === 'mesai-sistemi-kur') {
             const embed = new EmbedBuilder()
                 .setTitle('⚖️ BCSO MESAİ SİSTEMİ')
-                .setDescription('Aşağıdaki butonları kullanarak mesai giriş (10-41) ve çıkış (10-42) işlemlerini gerçekleştirebilirsiniz.\n\n**Kurallar:**\n• Görev başında olmadığınız sürece mesai başlatmayın.\n• Suiistimal durumunda mesaileriniz sıfırlanır.')
+                .setDescription('Aşağıdaki butonları kullanarak mesai giriş ve çıkış işlemlerini yapabilirsiniz.')
                 .setColor('#2b2d31')
-                .setThumbnail(AYARLAR.LOGO)
-                .setFooter({ text: 'BCSO Personel Takip Sistemi' });
-
+                .setThumbnail(AYARLAR.LOGO);
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('mesai_basla').setLabel('Mesai Giriş (10-41)').setStyle(ButtonStyle.Success),
                 new ButtonBuilder().setCustomId('mesai_bitir').setLabel('Mesai Çıkış (10-42)').setStyle(ButtonStyle.Danger)
             );
             await channel.send({ embeds: [embed], components: [row] });
-            await interaction.editReply('✅ Görsel panel kuruldu.');
+            await interaction.editReply('✅ Panel kuruldu.');
         }
-        // ... (Diğer komutlar aynı kalacak)
         else if (commandName === 'mesai-ekle') {
             const u = options.getUser('kisi');
             toplamMesailer[u.id] = (toplamMesailer[u.id] || 0) + options.getInteger('dakika');
             veritabaniKaydet();
             await interaction.editReply(`✅ **${u.username}** adlı kişiye mesai eklendi.`);
         }
-        else if (commandName === 'mesai-sıfırla') {
-            const u = options.getUser('kisi');
-            toplamMesailer[u.id] = 0;
-            veritabaniKaydet();
-            await interaction.editReply(`🧹 **${u.username}** mesaileri sıfırlandı.`);
-        }
         else if (commandName === 'mesai-kontrol') {
             const u = options.getUser('kisi') || interaction.user;
             await interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dakika mesai yapmış.`);
         }
+        else if (commandName === 'başvuru-sistemi-kur') {
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('basvuru_formu_ac').setLabel('Başvuru Yap').setStyle(ButtonStyle.Primary));
+            await channel.send({ content: 'Başvuru Paneli:', components: [row] });
+            await interaction.editReply('✅ Panel kuruldu.');
+        }
     }
 
     if (interaction.isButton()) {
-        if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 **10-41** (Mesai) Başladı. İyi görevler!', ephemeral: true }); }
+        if (interaction.customId === 'basvuru_formu_ac') {
+            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru Formu')
+                .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_aktiflik').setLabel('Aktiflik').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_tecrube').setLabel('Tecrübe').setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_neden').setLabel('Neden?').setStyle(TextInputStyle.Paragraph).setRequired(true)));
+            await interaction.showModal(modal);
+        }
+        else if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 10-41.', ephemeral: true }); }
         else if (interaction.customId === 'mesai_bitir') {
             if (!mesaiTakip.has(interaction.user.id)) return await interaction.reply({ content: '❌ Aktif mesain yok.', ephemeral: true });
             const sure = Math.floor((Date.now() - mesaiTakip.get(interaction.user.id)) / 60000);
-            mesaiTakip.delete(interaction.user.id);
-            toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
-            veritabaniKaydet();
-            await interaction.reply({ content: `✅ **10-42** (Mesai) Bitti. Toplam süre: ${sure} dakika.`, ephemeral: true });
-        }
-    }
-});
-
-client.login(process.env.TOKEN);

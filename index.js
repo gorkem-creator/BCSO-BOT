@@ -17,11 +17,11 @@ function veritabaniKaydet() { fs.writeFileSync(VERITABANI_DOSYASI, JSON.stringif
 
 client.once('ready', async () => {
     const commands = [
-        new SlashCommandBuilder().setName('katıl').setDescription('Telsiz kanalına girer.'),
-        new SlashCommandBuilder().setName('ayrıl').setDescription('Telsizden çıkar.'),
+        new SlashCommandBuilder().setName('katıl').setDescription('Botu ses kanalına çağırır.'),
+        new SlashCommandBuilder().setName('ayrıl').setDescription('Botu ses kanalından çıkarır.'),
         new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Görsel mesai paneli kurar.'),
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
-        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekle.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
         new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setRequired(true)),
         new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol eder.').addUserOption(o => o.setName('kisi')),
         new SlashCommandBuilder().setName('mesai-sıralaması').setDescription('Mesai sıralamasını gösterir.')
@@ -32,25 +32,26 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
+    // 1. Slash Komutları (deferReply kullanılan yerler)
     if (interaction.isChatInputCommand()) {
-        const { commandName, options, member, guild, channel } = interaction;
         await interaction.deferReply({ ephemeral: true });
+        const { commandName, options, member, guild, channel } = interaction;
 
         if (commandName === 'katıl') {
-            if (!member.voice.channel) return await interaction.editReply('❌ Ses kanalında değilsin.');
+            if (!member.voice.channel) return interaction.editReply('❌ Ses kanalında değilsin.');
             joinVoiceChannel({ channelId: member.voice.channel.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator });
-            await interaction.editReply('🔊 Telsize bağlanıldı.');
+            interaction.editReply('🔊 Telsize bağlanıldı.');
         } 
         else if (commandName === 'ayrıl') {
             const conn = getVoiceConnection(guild.id);
-            if (conn) { conn.destroy(); await interaction.editReply('🔇 Telsiz bağlantısı kesildi.'); }
-            else await interaction.editReply('❌ Bot kanalda değil.');
+            if (conn) { conn.destroy(); interaction.editReply('🔇 Telsiz bağlantısı kesildi.'); }
+            else interaction.editReply('❌ Bot zaten kanalda değil.');
         }
         else if (commandName === 'mesai-sıfırla') {
             const u = options.getUser('kisi');
             toplamMesailer[u.id] = 0;
             veritabaniKaydet();
-            await interaction.editReply(`🧹 **${u.username}** adlı kişinin mesaisi başarıyla sıfırlandı.`);
+            interaction.editReply(`🧹 **${u.username}** mesaisi sıfırlandı.`);
         }
         else if (commandName === 'mesai-sistemi-kur') {
             const embed = new EmbedBuilder()
@@ -59,49 +60,53 @@ client.on('interactionCreate', async interaction => {
                 .setImage('https://media.discordapp.net/attachments/1498313566015717446/1498797722365460683/image.png')
                 .setDescription('Giriş/Çıkış yapın.\n\n⚠️ **Rolde değilken mesai açık olma durumlarında mesainiz sıfırlanır ve strike yersiniz!**')
                 .setColor('#2b2d31');
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mesai_basla').setLabel('10-41 (Giriş)').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('mesai_bitir').setLabel('10-42 (Çıkış)').setStyle(ButtonStyle.Danger));
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('mesai_basla').setLabel('10-41 (Giriş)').setStyle(ButtonStyle.Success), 
+                new ButtonBuilder().setCustomId('mesai_bitir').setLabel('10-42 (Çıkış)').setStyle(ButtonStyle.Danger)
+            );
             await channel.send({ embeds: [embed], components: [row] });
-            await interaction.editReply('✅ Panel kuruldu.');
+            interaction.editReply('✅ Panel kuruldu.');
         }
         else if (commandName === 'başvuru-sistemi-kur') {
             const embed = new EmbedBuilder()
-                .setTitle('📚 BLAINE COUNTY SHERIFF\'S OFFICE | BAŞVURU')
+                .setTitle('📚 BCSO | BAŞVURU')
                 .setImage('https://media.discordapp.net/attachments/1498313566015717446/1498797722365460683/image.png')
-                .setDescription('Blaine County Şerif Departmanı bünyesine katılmak ve şerif yardımcısı rütbesiyle devriyeye çıkmak için aşağıdaki butondan formu doldurabilirsiniz.')
+                .setDescription('Blaine County Şerif Departmanı bünyesine katılmak için formu doldurabilirsiniz.')
                 .setColor('#2b2d31');
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('basvuru_formu_ac').setLabel('Başvuru Yap').setStyle(ButtonStyle.Primary));
             await channel.send({ embeds: [embed], components: [row] });
-            await interaction.editReply('✅ Panel kuruldu.');
+            interaction.editReply('✅ Panel kuruldu.');
         }
         else if (commandName === 'mesai-ekle') {
             toplamMesailer[options.getUser('kisi').id] = (toplamMesailer[options.getUser('kisi').id] || 0) + options.getInteger('dakika');
             veritabaniKaydet();
-            await interaction.editReply('✅ Mesai eklendi.');
+            interaction.editReply('✅ Mesai eklendi.');
         }
         else if (commandName === 'mesai-kontrol') {
             const u = options.getUser('kisi') || interaction.user;
-            await interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dk mesai yapmış.`);
+            interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dk mesai yapmış.`);
         }
         else if (commandName === 'mesai-sıralaması') {
             const sirali = Object.entries(toplamMesailer).sort((a,b) => b[1]-a[1]).slice(0,10).map((x,i) => `${i+1}. <@${x[0]}>: ${x[1]} dk`).join('\n');
-            await interaction.editReply(sirali || 'Kayıt yok.');
+            interaction.editReply(sirali || 'Kayıt yok.');
         }
     }
 
+    // 2. Butonlar (reply kullanılan yerler)
     if (interaction.isButton()) {
-        if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 10-41 (Giriş) Başladı.', ephemeral: true }); }
+        if (interaction.customId === 'mesai_basla') {
+            mesaiTakip.set(interaction.user.id, Date.now());
+            interaction.reply({ content: '🟢 10-41 (Giriş) Başladı.', ephemeral: true });
+        }
         else if (interaction.customId === 'mesai_bitir') {
-            if (!mesaiTakip.has(interaction.user.id)) return await interaction.reply({ content: '❌ Aktif mesain yok.', ephemeral: true });
+            if (!mesaiTakip.has(interaction.user.id)) return interaction.reply({ content: '❌ Aktif mesain yok.', ephemeral: true });
             const sure = Math.floor((Date.now() - mesaiTakip.get(interaction.user.id)) / 60000);
             mesaiTakip.delete(interaction.user.id);
             toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
             veritabaniKaydet();
-            await interaction.reply({ content: `✅ 10-42 (Çıkış) Yapıldı. Süre: ${sure} dk.`, ephemeral: true });
+            interaction.reply({ content: `✅ 10-42 (Çıkış) Yapıldı. Süre: ${sure} dk.`, ephemeral: true });
             const log = interaction.guild.channels.cache.find(c => c.name === LOG_KANALI_ISMI);
-            if (log) {
-                const logEmbed = new EmbedBuilder().setTitle('📊 MESAİ LOG').addFields({name: 'Personel', value: interaction.user.username}, {name: 'Süre', value: `${sure} dk`}).setColor('Red');
-                log.send({ embeds: [logEmbed] });
-            }
+            if (log) log.send({ embeds: [new EmbedBuilder().setTitle('📊 MESAİ LOG').addFields({name: 'Personel', value: interaction.user.username}, {name: 'Süre', value: `${sure} dk`}).setColor('Red')] });
         }
         else if (interaction.customId === 'basvuru_formu_ac') {
             const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('BCSO Başvuru').addComponents(

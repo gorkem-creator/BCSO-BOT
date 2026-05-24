@@ -1,17 +1,13 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 const fs = require('fs');
 require('dotenv').config();
 
-const http = require('http');
-http.createServer((req, res) => { res.write("Bot aktif!"); res.end(); }).listen(process.env.PORT || 3000);
-
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers]
-});
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers] });
 
 const mesaiTakip = new Map();
 const VERITABANI_DOSYASI = './mesaiSüreleri.json';
+const LOG_KANALI_ISMI = '⏰・ᴍᴇꜱᴀɪ-ʟᴏɢ'; 
 
 let toplamMesailer = {};
 if (fs.existsSync(VERITABANI_DOSYASI)) {
@@ -19,20 +15,16 @@ if (fs.existsSync(VERITABANI_DOSYASI)) {
 }
 function veritabaniKaydet() { fs.writeFileSync(VERITABANI_DOSYASI, JSON.stringify(toplamMesailer, null, 4), 'utf8'); }
 
-const AYARLAR = { 
-    BASVURU_TAKIP_KANALI: '📚・ʙᴀşᴠᴜʀᴜ-ᴛᴀᴋɪᴘ',
-    LOGO: 'https://media.discordapp.net/attachments/1438149589667545125/1497790266076299305/Logo_BCSO.png' 
-};
-
 client.once('ready', async () => {
     const commands = [
         new SlashCommandBuilder().setName('katıl').setDescription('Telsiz kanalına girer.'),
         new SlashCommandBuilder().setName('ayrıl').setDescription('Telsizden çıkar.'),
         new SlashCommandBuilder().setName('mesai-sistemi-kur').setDescription('Görsel mesai paneli kurar.'),
         new SlashCommandBuilder().setName('başvuru-sistemi-kur').setDescription('Başvuru paneli kurar.'),
-        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekler.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setDescription('Dakika').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırlar.').addUserOption(o => o.setName('kisi').setDescription('Kişi').setRequired(true)),
-        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesaiyi kontrol eder.').addUserOption(o => o.setName('kisi').setDescription('Kişi'))
+        new SlashCommandBuilder().setName('mesai-ekle').setDescription('Mesai ekle.').addUserOption(o => o.setName('kisi').setRequired(true)).addIntegerOption(o => o.setName('dakika').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-sıfırla').setDescription('Mesai sıfırla.').addUserOption(o => o.setName('kisi').setRequired(true)),
+        new SlashCommandBuilder().setName('mesai-kontrol').setDescription('Mesai kontrol.').addUserOption(o => o.setName('kisi')),
+        new SlashCommandBuilder().setName('mesai-sıralaması').setDescription('Mesai sıralamasını gösterir.')
     ].map(cmd => cmd.toJSON());
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
@@ -46,69 +38,54 @@ client.on('interactionCreate', async interaction => {
 
         if (commandName === 'katıl') {
             if (!member.voice.channel) return await interaction.editReply('❌ Ses kanalında değilsin.');
-            try {
-                joinVoiceChannel({ channelId: member.voice.channel.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator });
-                await interaction.editReply('🔊 Telsize bağlanıldı.');
-            } catch (e) { await interaction.editReply('❌ Hata oluştu.'); }
-        }
+            joinVoiceChannel({ channelId: member.voice.channel.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator });
+            await interaction.editReply('🔊 Telsize bağlanıldı.');
+        } 
         else if (commandName === 'ayrıl') {
             const conn = getVoiceConnection(guild.id);
             if (conn) { conn.destroy(); await interaction.editReply('🔇 Telsiz bağlantısı kesildi.'); }
-            else { await interaction.editReply('❌ Bot zaten kanalda değil.'); }
+            else await interaction.editReply('❌ Bot zaten kanalda değil.');
         }
         else if (commandName === 'mesai-sistemi-kur') {
-            const embed = new EmbedBuilder()
-                .setTitle('⚖️ BCSO MESAİ SİSTEMİ')
-                .setDescription('Aşağıdaki butonları kullanarak mesai giriş (10-41) ve çıkış (10-42) yapabilirsiniz.')
-                .setColor('#2b2d31')
-                .setThumbnail(AYARLAR.LOGO);
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('mesai_basla').setLabel('10-41 (Giriş)').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('mesai_bitir').setLabel('10-42 (Çıkış)').setStyle(ButtonStyle.Danger)
-            );
+            const embed = new EmbedBuilder().setTitle('⚖️ BCSO MESAİ').setDescription('Giriş/Çıkış yapın.').setColor('#2b2d31');
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mesai_basla').setLabel('10-41').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('mesai_bitir').setLabel('10-42').setStyle(ButtonStyle.Danger));
             await channel.send({ embeds: [embed], components: [row] });
             await interaction.editReply('✅ Panel kuruldu.');
-        }
-        else if (commandName === 'mesai-ekle') {
-            const u = options.getUser('kisi');
-            toplamMesailer[u.id] = (toplamMesailer[u.id] || 0) + options.getInteger('dakika');
-            veritabaniKaydet();
-            await interaction.editReply(`✅ **${u.username}** adlı kişiye mesai eklendi.`);
-        }
-        else if (commandName === 'mesai-kontrol') {
-            const u = options.getUser('kisi') || interaction.user;
-            await interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dakika mesai yapmış.`);
         }
         else if (commandName === 'başvuru-sistemi-kur') {
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('basvuru_formu_ac').setLabel('Başvuru Yap').setStyle(ButtonStyle.Primary));
             await channel.send({ content: 'Başvuru Paneli:', components: [row] });
             await interaction.editReply('✅ Panel kuruldu.');
         }
+        else if (commandName === 'mesai-ekle') {
+            toplamMesailer[options.getUser('kisi').id] = (toplamMesailer[options.getUser('kisi').id] || 0) + options.getInteger('dakika');
+            veritabaniKaydet();
+            await interaction.editReply('✅ Mesai eklendi.');
+        }
+        else if (commandName === 'mesai-kontrol') {
+            const u = options.getUser('kisi') || interaction.user;
+            await interaction.editReply(`📊 **${u.username}** toplam ${toplamMesailer[u.id] || 0} dk mesai yapmış.`);
+        }
+        else if (commandName === 'mesai-sıralaması') {
+            const sirali = Object.entries(toplamMesailer).sort((a,b) => b[1]-a[1]).slice(0,10).map((x,i) => `${i+1}. <@${x[0]>: ${x[1]} dk`).join('\n');
+            await interaction.editReply(sirali || 'Kayıt yok.');
+        }
     }
 
     if (interaction.isButton()) {
         if (interaction.customId === 'mesai_basla') { mesaiTakip.set(interaction.user.id, Date.now()); await interaction.reply({ content: '🟢 10-41.', ephemeral: true }); }
         else if (interaction.customId === 'mesai_bitir') {
-            if (!mesaiTakip.has(interaction.user.id)) return await interaction.reply({ content: '❌ Aktif mesain yok.', ephemeral: true });
             const sure = Math.floor((Date.now() - mesaiTakip.get(interaction.user.id)) / 60000);
             mesaiTakip.delete(interaction.user.id);
             toplamMesailer[interaction.user.id] = (toplamMesailer[interaction.user.id] || 0) + sure;
             veritabaniKaydet();
             await interaction.reply({ content: `✅ 10-42. Süre: ${sure} dk.`, ephemeral: true });
+            const log = interaction.guild.channels.cache.find(c => c.name === LOG_KANALI_ISMI);
+            if (log) log.send(`📊 **${interaction.user.username}**: ${sure} dk mesai yaptı.`);
         }
         else if (interaction.customId === 'basvuru_formu_ac') {
-            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru Formu')
-                .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim/Yaş').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_aktiflik').setLabel('Aktiflik').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_tecrube').setLabel('Tecrübe').setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_neden').setLabel('Neden?').setStyle(TextInputStyle.Paragraph).setRequired(true)));
+            const modal = new ModalBuilder().setCustomId('bcso_basvuru_modali').setTitle('Başvuru').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('b_isim').setLabel('İsim/Yaş').setStyle(TextInputStyle.Short).setRequired(true)));
             await interaction.showModal(modal);
-        }
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId === 'bcso_basvuru_modali') {
-        await interaction.reply({ content: '✅ İletildi.', ephemeral: true });
-        const takipKanali = interaction.guild.channels.cache.find(ch => ch.name.toLowerCase().includes(AYARLAR.BASVURU_TAKIP_KANALI.toLowerCase()));
-        if (takipKanali) {
-            const embed = new EmbedBuilder().setTitle('Yeni Başvuru').addFields({ name: 'İsim', value: interaction.fields.getTextInputValue('b_isim') });
-            await takipKanali.send({ embeds: [embed] });
         }
     }
 });

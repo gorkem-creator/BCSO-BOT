@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@discordjs/builders": "^1.14.1",
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.26.4",
+    "quick.db": "^9.1.7"
+  }
+}
